@@ -174,7 +174,36 @@ def iterative_buildtree(part: Data, scoref=entropy, beta=0):
     """
     t10: Define the iterative version of the function buildtree
     """
-    raise NotImplementedError
+    stack = [] # Stack of nodes to be processed
+    root = DecisionNode()
+    stack.append((root, part))
+
+    while len(stack) > 0:
+        node, data = stack.pop()
+
+        if len(data) == 0:
+            continue
+
+        current_score = scoref(data)
+
+        if current_score == 0:
+            node.results = unique_counts(data)
+            continue
+
+        best_gain, best_criteria, best_sets = search_best_decision(data, scoref)
+
+        if best_gain < beta: # Stop criterion
+            node.results = unique_counts(data)
+            continue
+
+        node.col = best_criteria[0]
+        node.value = best_criteria[1]
+        node.tb = DecisionNode()
+        node.fb = DecisionNode()
+        stack.append((node.tb, best_sets[0]))
+        stack.append((node.fb, best_sets[1]))
+
+    return root
 
 
 def print_tree(tree, headers=None, indent=""):
@@ -215,18 +244,3 @@ def print_data(headers, data):
                 print(value.ljust(colsize), end="|")
         print("")
     print('-' * ((colsize + 1) * len(headers) + 1))
-
-
-def main():
-    try:
-        filename = sys.argv[1]
-    except IndexError:
-        filename = "decision_tree_example.txt"
-    header, data = read(filename)
-    print_data(header, data)
-
-    print(divideset(data, 2, "yes"))
-
-
-if __name__ == "__main__":
-    main()
