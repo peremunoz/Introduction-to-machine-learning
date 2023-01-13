@@ -90,7 +90,7 @@ def divideset(part: Data, column: int, value: int or float or str) -> Tuple[Data
 
     for row in part:
         set1.append(row) if split_function(row, column, value) else set2.append(row)
-    return (set1, set2)
+    return set1, set2
 
 
 class DecisionNode:
@@ -106,7 +106,11 @@ class DecisionNode:
         - results is a dictionary that stores the result
           for this branch. Is None except for the leaves
         """
-        raise NotImplementedError
+        self.col = col
+        self.value = value
+        self.results = results
+        self.tb = tb
+        self.fb = fb
 
 
 def buildtree(part: Data, scoref=entropy, beta=0):
@@ -120,13 +124,50 @@ def buildtree(part: Data, scoref=entropy, beta=0):
 
     current_score = scoref(part)
 
-    # Set up some variables to track the best criteria
+    if current_score == 0:
+        return DecisionNode(results=unique_counts(part))
+
+    best_gain, best_criteria, best_sets = search_best_decision(part, scoref)
+
+    if best_gain < beta: # Stop criterion
+        return DecisionNode(results=unique_counts(part))
+
+    return DecisionNode(col=best_criteria[0],
+                        value=best_criteria[1],
+                        tb=buildtree(best_sets[0], scoref, beta),
+                        fb=buildtree(best_sets[1], scoref, beta))
+
+
+def search_best_decision(part: Data, scoref=entropy):
+    """
+    Search for the best decision (best gain, criteria and sets) to make, based on the best gain possible
+    """
     best_gain = 0
     best_criteria = None
     best_sets = None
-    # ...
-    # else:
-    #    return DecisionNode(results=unique_counts(part))
+
+    # Count the number of columns (minus the label)
+    column_count = len(part[0]) - 1
+
+    for col in range(column_count):
+        # Generate the list of different values in this column
+        column_values = {}
+        for row in part:
+            column_values[row[col]] = 1
+
+        # Now try dividing the rows up for each value in this column
+        for value in column_values.keys():
+            (trueSet, falseSet) = divideset(part, col, value)
+
+            # Information gain
+            p = len(trueSet) / len(part)
+            gain = scoref(part) - p * scoref(trueSet) - (1 - p) * scoref(falseSet)
+            if gain > best_gain and len(trueSet) > 0 and len(falseSet) > 0:
+                best_gain = gain
+                best_criteria = (col, value)
+                best_sets = (trueSet, falseSet)
+
+    return best_gain, best_criteria, best_sets
 
 
 def iterative_buildtree(part: Data, scoref=entropy, beta=0):
