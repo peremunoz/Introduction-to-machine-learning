@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import random
 import sys
 import collections
 from math import log2
@@ -125,12 +126,20 @@ def buildtree(part: Data, scoref=entropy, beta=0):
     current_score = scoref(part)
 
     if current_score == 0:
-        return DecisionNode(results=unique_counts(part))
+        results = unique_counts(part)
+        if len(results) == 1:
+            return DecisionNode(results=results)
+        else:
+            return DecisionNode(results=random_voting(results))
 
     best_gain, best_criteria, best_sets = search_best_decision(part, scoref)
 
     if best_gain < beta: # Stop criterion
-        return DecisionNode(results=unique_counts(part))
+        results = unique_counts(part)
+        if len(results) == 1:
+            return DecisionNode(results=results)
+        else:
+            return DecisionNode(results=random_voting(results))
 
     return DecisionNode(col=best_criteria[0],
                         value=best_criteria[1],
@@ -169,6 +178,10 @@ def search_best_decision(part: Data, scoref=entropy):
 
     return best_gain, best_criteria, best_sets
 
+def random_voting(results):
+    labels = [label for label in results.keys()]
+    return random.choice(labels)
+
 
 def iterative_buildtree(part: Data, scoref=entropy, beta=0):
     """
@@ -187,13 +200,21 @@ def iterative_buildtree(part: Data, scoref=entropy, beta=0):
         current_score = scoref(data)
 
         if current_score == 0:
-            node.results = unique_counts(data)
+            results = unique_counts(data)
+            if len(results) == 1:
+                node.results = results
+            else:
+                node.results = random_voting(results)
             continue
 
         best_gain, best_criteria, best_sets = search_best_decision(data, scoref)
 
         if best_gain < beta: # Stop criterion
-            node.results = unique_counts(data)
+            results = unique_counts(data)
+            if len(results) == 1:
+                node.results = results
+            else:
+                node.results = random_voting(results)
             continue
 
         node.col = best_criteria[0]
@@ -244,3 +265,49 @@ def print_data(headers, data):
                 print(value.ljust(colsize), end="|")
         print("")
     print('-' * ((colsize + 1) * len(headers) + 1))
+
+def classify(tree, row, label_column=-1):
+    """
+    t12: Returns the classification of a row given a tree
+    """
+
+    # Is this a leaf node?
+    if tree.results is not None:
+        return tree.results
+
+    # Decide whether to follow the true-branch or the false-branch
+    value = row[tree.col]
+
+    if isinstance(value, (int, float)):
+        branch = tree.tb if value >= tree.value else tree.fb
+    else:
+        branch = tree.tb if value == tree.value else tree.fb
+
+    # Recursively call the function for the selected branch
+    return classify(branch, row, label_column)
+
+def prune(tree: DecisionNode, threshold: float, impurity=entropy):
+    # Check if true branch and false branch of the current node have results
+    if tree.tb.results is None:
+        prune(tree.tb, threshold)
+    if tree.fb.results is None:
+        prune(tree.fb, threshold)
+
+    # If true and false branches have results
+    if tree.tb.results is not None and tree.fb.results is not None:
+        tb, fb = [], []
+        # Flatten the results of true branch
+        for v, c in tree.tb.results.items():
+            tb += [[v]] * c
+        # Flatten the results of false branch
+        for v, c in tree.fb.results.items():
+            fb += [[v]] * c
+
+        # Calculate the impurity of the merged leaves and the impurity of each branch
+        p = len(tb) / len(tb + fb)
+        delta = impurity(tb + fb) - p * impurity(tb) - (1 - p) * impurity(fb)
+
+        # Check if delta is less than the threshold
+        if delta < threshold:
+            tree.tb, tree.fb = None, None
+            tree.results = unique_counts(tb + fb)
